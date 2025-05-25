@@ -23,7 +23,13 @@ class CacheManager:
             cache_dir: Optional custom cache directory. Defaults to platform-specific cache directory.
         """
         # Use appdirs to get the correct cache directory for the platform
-        self.cache_dir = cache_dir or user_cache_dir("marketquery")
+        if cache_dir:
+            # Expand environment variables in custom cache directory
+            self.cache_dir = os.path.expandvars(cache_dir)
+        else:
+            # Use platform-specific cache directory
+            self.cache_dir = user_cache_dir("marketquery")
+            
         self._ensure_cache_structure()
     
     def _ensure_cache_structure(self):
@@ -33,68 +39,99 @@ class CacheManager:
         
         # Create provider directories
         for provider in ["stooq", "yahoo", "tiingo", "alpha_vantage", "polygon"]:
-            for data_type in ["unadjusted", "adjusted"]:
-                Path(self.cache_dir, provider, data_type).mkdir(parents=True, exist_ok=True)
+            Path(self.cache_dir, provider).mkdir(parents=True, exist_ok=True)
     
-    def _get_cache_path(self, provider: str, data_type: str, symbol: str) -> tuple[Path, Path]:
+    def _get_cache_path(
+        self,
+        provider: str,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        interval: str
+    ) -> str:
         """
-        Get paths for data and metadata files
+        Get the cache path for the given parameters
         
         Args:
-            provider: Data provider (e.g., 'stooq', 'yahoo')
-            data_type: Type of data ('unadjusted' or 'adjusted')
-            symbol: Stock symbol
+            provider: Provider name
+            symbol: Ticker symbol
+            start_date: Start date
+            end_date: End date
+            interval: Data interval
             
         Returns:
-            Tuple of (data_path, metadata_path)
+            Path to cache file
         """
-        base_path = Path(self.cache_dir, provider, data_type)
-        return (
-            base_path / f"{symbol}.pkl",
-            base_path / f"{symbol}.json"
+        # Create filename from symbol only
+        filename = f"{symbol}.pkl"
+        
+        # Create full path
+        return os.path.join(
+            self.cache_dir,
+            provider,
+            filename
         )
     
     def save_data(
         self,
         provider: str,
-        data_type: str,
         symbol: str,
-        data: pd.DataFrame,
         start_date: str,
         end_date: str,
-        interval: str
-    ):
+        interval: str,
+        data: pd.DataFrame
+    ) -> None:
         """
         Save data to cache
         
         Args:
-            provider: Data provider
-            data_type: Type of data ('unadjusted' or 'adjusted')
-            symbol: Stock symbol
+            provider: Provider name
+            symbol: Ticker symbol
+            start_date: Start date
+            end_date: End date
+            interval: Data interval
             data: DataFrame to cache
-            start_date: Start date of data
-            end_date: End date of data
-            interval: Data interval (e.g., '1d', '1wk')
         """
-        data_path, metadata_path = self._get_cache_path(provider, data_type, symbol)
-
-        # Save data
-        data.to_pickle(data_path)
+        # Create cache path
+        data_path = self._get_cache_path(
+            provider=provider,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            interval=interval
+        )
         
-        # Save metadata
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
+        
+        # Create metadata
         metadata = {
             "start_date": start_date,
             "end_date": end_date,
             "interval": interval,
             "cached_at": datetime.now().isoformat()
         }
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f)
+        
+        # Ensure data has symbol level in columns
+        if isinstance(data.columns, pd.MultiIndex):
+            if data.columns.names[0] != 'Symbol':
+                data.columns = pd.MultiIndex.from_product([[symbol], data.columns], names=['Symbol', 'Field'])
+        else:
+            data.columns = pd.MultiIndex.from_product([[symbol], data.columns], names=['Symbol', 'Field'])
+        
+        # Save both data and metadata
+        cache_data = {
+            "metadata": metadata,
+            "data": data
+        }
+        
+        # Save to cache
+        with open(data_path, 'wb') as f:
+            pickle.dump(cache_data, f)
     
     def load_data(
         self,
         provider: str,
-        data_type: str,
         symbol: str,
         start_date: str,
         end_date: str,
@@ -105,7 +142,6 @@ class CacheManager:
         
         Args:
             provider: Data provider
-            data_type: Type of data ('unadjusted' or 'adjusted')
             symbol: Stock symbol
             start_date: Requested start date
             end_date: Requested end date
@@ -114,26 +150,36 @@ class CacheManager:
         Returns:
             Cached DataFrame if available and valid, None otherwise
         """
-        data_path, metadata_path = self._get_cache_path(provider, data_type, symbol)
+        data_path = self._get_cache_path(
+            provider=provider,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            interval=interval
+        )
         
         # Check if cache exists
-        if not data_path.exists() or not metadata_path.exists():
+        if not os.path.exists(data_path):
             return None
             
-        # Load metadata
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        try:
+            # Load cache data
+            with open(data_path, 'rb') as f:
+                cache_data = pickle.load(f)
+                
+            # Check if metadata matches
+            metadata = cache_data["metadata"]
+            if (
+                metadata["start_date"] == start_date and
+                metadata["end_date"] == end_date and
+                metadata["interval"] == interval
+            ):
+                return cache_data["data"]
+                
+            return None
             
-        # Check if cache is valid
-        if (
-            metadata["start_date"] == start_date and
-            metadata["end_date"] == end_date and
-            metadata["interval"] == interval
-        ):
-            # Load and return cached data
-            return pd.read_pickle(data_path)
-            
-        return None
+        except Exception as e:
+            return None
     
     def clear_cache(self, provider: Optional[str] = None):
         """
@@ -146,17 +192,11 @@ class CacheManager:
             # Clear specific provider
             provider_path = Path(self.cache_dir, provider)
             if provider_path.exists():
-                for data_type in ["unadjusted", "adjusted"]:
-                    type_path = provider_path / data_type
-                    if type_path.exists():
-                        for file in type_path.glob("*"):
-                            file.unlink()
+                for file in provider_path.glob("*"):
+                    file.unlink()
         else:
             # Clear all caches
             for provider_path in Path(self.cache_dir).glob("*"):
                 if provider_path.is_dir():
-                    for data_type in ["unadjusted", "adjusted"]:
-                        type_path = provider_path / data_type
-                        if type_path.exists():
-                            for file in type_path.glob("*"):
-                                file.unlink() 
+                    for file in provider_path.glob("*"):
+                        file.unlink() 

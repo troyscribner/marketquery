@@ -33,6 +33,7 @@ dependencies = [
     "appdirs>=1.4.4",
     "alpha_vantage>=2.3.1",
     "tiingo>=0.4.0",
+    "polygon-api-client>=1.12.0",
 ]
 
 [project.optional-dependencies]
@@ -80,4 +81,27 @@ warn_unreachable = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --cov=marketquery --cov-report=term-missing" 
+addopts = "--cov=marketquery --cov-report=term-missing"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning"
+]
+
+[tool.coverage.run]
+source = ["marketquery"]
+omit = [
+    "tests/*",
+    "setup.py",
+    "*/__init__.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError"
+] 

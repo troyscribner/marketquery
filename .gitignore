@@ -178,8 +178,10 @@ cython_debug/
 ~/.marketquery/
 ~/.cache/marketquery/
 ~/Library/Caches/marketquery/
-%LOCALAPPDATA%\marketquery\
-%APPDATA%\marketquery\
+
+# Windows cache directories (commented out as they cause build issues)
+# %LOCALAPPDATA%\marketquery\
+# %APPDATA%\marketquery\
 
 # Python
 __pycache__/
@@ -227,11 +229,6 @@ htmlcov/
 
 # Logs
 *.log
-
-# Cache
-.cache/
-.pytest_cache/
-.mypy_cache/
 
 # OS
 .DS_Store

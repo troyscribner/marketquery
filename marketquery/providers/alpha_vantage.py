@@ -23,10 +23,6 @@ class AlphaVantageProvider(BaseProvider):
     If a premium key is available, it will be used by default.
     """
     
-    # Class variables to store API keys in memory
-    _premium_api_key = None
-    _api_key = None
-    
     def __init__(self, api_key: Optional[str] = None, premium_api_key: Optional[str] = None):
         """
         Initialize the Alpha Vantage provider.
@@ -35,27 +31,30 @@ class AlphaVantageProvider(BaseProvider):
             api_key: Optional regular API key for Alpha Vantage
             premium_api_key: Optional premium API key for Alpha Vantage
         """
-        super().__init__(api_key)
-        self.premium_api_key = premium_api_key
+        super().__init__(api_key=api_key, premium_api_key=premium_api_key)
         self._get_api_keys()
     
     def _get_api_keys(self) -> None:
         """Get API keys from various sources"""
+        print(f"\nGetting API keys. Current state:")
+        print(f"Constructor api_key: {self.api_key}")
+        print(f"Constructor premium_api_key: {self.premium_api_key}")
+        
         # If API keys were provided in constructor, use them
-        if self.api_key:
-            self._api_key = self.api_key
-        if self.premium_api_key:
-            self._premium_api_key = self.premium_api_key
-            
-        # Check if keys are already in memory
-        if self._premium_api_key or self._api_key:
+        if self.api_key or self.premium_api_key:
+            print("Keys already in memory, returning")
             return
             
         # Try to get API keys from environment variables
-        self._premium_api_key = os.getenv(ENV_VARS['premium_api_key'])
-        self._api_key = os.getenv(ENV_VARS['api_key'])
+        self.premium_api_key = os.getenv(ENV_VARS['premium_api_key'])
+        self.api_key = os.getenv(ENV_VARS['api_key'])
         
-        if self._premium_api_key or self._api_key:
+        print(f"\nAfter environment check:")
+        print(f"api_key: {self.api_key}")
+        print(f"premium_api_key: {self.premium_api_key}")
+        
+        if self.premium_api_key or self.api_key:
+            print("Found keys in environment, returning")
             return
             
         # Prompt user for API key
@@ -70,25 +69,31 @@ class AlphaVantageProvider(BaseProvider):
         
         premium_key = input("Enter your premium API key (press Enter to skip): ")
         if premium_key:
-            self._premium_api_key = premium_key
+            self.premium_api_key = premium_key
         else:
-            self._api_key = input("Enter your regular API key: ")
+            self.api_key = input("Enter your regular API key: ")
+            
+        print(f"\nFinal state:")
+        print(f"api_key: {self.api_key}")
+        print(f"premium_api_key: {self.premium_api_key}")
     
     def _get_time_series(self) -> TimeSeries:
         """Get TimeSeries instance with appropriate API key"""
-        if self._premium_api_key:
-            return TimeSeries(key=self._premium_api_key, output_format='pandas')
-        return TimeSeries(key=self._api_key, output_format='pandas')
+        if self.premium_api_key:
+            return TimeSeries(key=self.premium_api_key, output_format='pandas')
+        return TimeSeries(key=self.api_key, output_format='pandas')
     
     def _standardize_dataframe(self, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """Convert Alpha Vantage dataframe to standard format"""
+        # Create a copy of the dataframe to avoid modifying the original
+        df = df.copy()
+        
+        # Only keep columns that exist in our mapping
+        valid_columns = [col for col in df.columns if col in ALPHA_VANTAGE_COLUMNS]
+        df = df[valid_columns]
+        
         # Rename columns to standard format
         df = df.rename(columns=ALPHA_VANTAGE_COLUMNS)
-        
-        # Ensure all standard columns exist
-        for col in ALPHA_VANTAGE_COLUMNS.values():
-            if col not in df.columns:
-                df[col] = None
         
         # Create multi-index columns
         df.columns = pd.MultiIndex.from_product([[ticker], df.columns])
@@ -167,7 +172,8 @@ class AlphaVantageProvider(BaseProvider):
                 if av_interval in ["1min", "5min", "15min", "30min", "60min"]:
                     data, _ = ts.get_intraday(symbol=ticker, interval=av_interval, outputsize='full')
                 elif av_interval == "daily":
-                    if self._premium_api_key and (auto_adjust or back_adjust):
+                    # Use adjusted data if we have a premium key and auto_adjust is True
+                    if self.premium_api_key and (auto_adjust is True or back_adjust):
                         data, _ = ts.get_daily_adjusted(symbol=ticker, outputsize='full')
                     else:
                         data, _ = ts.get_daily(symbol=ticker, outputsize='full')
@@ -175,7 +181,7 @@ class AlphaVantageProvider(BaseProvider):
                     data, _ = ts.get_weekly(symbol=ticker)
                 elif av_interval == "monthly":
                     data, _ = ts.get_monthly(symbol=ticker)
-                    
+
                 # Standardize dataframe format
                 data = self._standardize_dataframe(data, ticker)
                 

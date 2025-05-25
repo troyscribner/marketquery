@@ -55,6 +55,9 @@ class TiingoProvider(BaseProvider):
         existing_columns = {k: v for k, v in column_map.items() if k in df.columns}
         df = df.rename(columns=existing_columns)
         
+        # Convert timezone-aware datetime to timezone-naive
+        df.index = df.index.tz_localize(None)
+
         # Create multi-index columns
         df.columns = pd.MultiIndex.from_product([[ticker], df.columns])
         
@@ -150,7 +153,7 @@ class TiingoProvider(BaseProvider):
         # Convert single ticker to list
         if isinstance(tickers, str):
             tickers = [tickers]
-            
+
         if not threads or len(tickers) == 1:
             # Single-threaded download
             dfs = []

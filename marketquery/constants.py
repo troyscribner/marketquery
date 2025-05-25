@@ -12,11 +12,11 @@ COLUMNS = {
     'volume': 'volume',
     
     # Adjusted prices
-    'open_adj': 'open_adj',
-    'high_adj': 'high_adj',
-    'low_adj': 'low_adj',
-    'close_adj': 'close_adj',
-    'volume_adj': 'volume_adj',
+    'adj_open': 'adj_open',
+    'adj_high': 'adj_high',
+    'adj_low': 'adj_low',
+    'adj_close': 'adj_close',
+    'adj_volume': 'adj_volume',
     
     # Corporate actions
     'dividends': 'dividends',
@@ -29,7 +29,8 @@ ALPHA_VANTAGE_COLUMNS = {
     '2. high': 'high',
     '3. low': 'low',
     '4. close': 'close',
-    '5. adjusted close': 'close_adj',
+    '5. adjusted close': 'adj_close',
+    '5. volume': 'volume',
     '6. volume': 'volume',
     '7. dividend amount': 'dividend',
     '8. split coefficient': 'split'
@@ -50,5 +51,6 @@ INTERVALS = {
 # Environment variable names
 ENV_VARS = {
     'premium_api_key': 'ALPHA_VANTAGE_PREMIUM_API_KEY',
-    'api_key': 'ALPHA_VANTAGE_API_KEY'
+    'api_key': 'ALPHA_VANTAGE_API_KEY',
+    'default_provider': 'MARKETQUERY_DEFAULT_PROVIDER'
 } 

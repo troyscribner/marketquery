@@ -5,6 +5,7 @@ MarketDataClient - Main client class for interacting with market data providers
 from typing import Dict, List, Optional, Union, Any
 from tqdm import tqdm
 import pandas as pd
+import os
 from .providers.base import BaseProvider
 from .providers.yahoo import YahooProvider
 from .providers.alpha_vantage import AlphaVantageProvider
@@ -12,7 +13,7 @@ from .providers.stooq import StooqProvider
 from .providers.polygon import PolygonProvider
 from .providers.tiingo import TiingoProvider
 from .cache import CacheManager
-
+from .constants import ENV_VARS
 
 class MarketDataClient:
     """
@@ -31,13 +32,13 @@ class MarketDataClient:
         cache_dir: Optional[str] = None
     ):
         """
-        Initialize the MarketDataClient with a specific provider.
+        Initialize the MarketDataClient
         
         Args:
             provider: Name of the provider to use (default: "yahoo")
             api_key: Optional API key for the provider
             premium_api_key: Optional premium API key for the provider
-            cache_dir: Optional custom cache directory
+            cache_dir: Optional directory to store cached data
         """
         self.provider = self._get_provider(provider, api_key, premium_api_key)
         self.cache = CacheManager(cache_dir)
@@ -72,6 +73,15 @@ class MarketDataClient:
         if provider == "stooq":
             return providers[provider]()
             
+        # Check for API key in environment variables if not provided
+        if api_key is None:
+            if provider == "tiingo":
+                api_key = os.getenv('TIINGO_API_KEY')
+            elif provider == "alpha_vantage":
+                api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+                if premium_api_key is None:  # Only get from env if not provided in constructor
+                    premium_api_key = os.getenv('ALPHA_VANTAGE_PREMIUM_API_KEY')
+            
         return providers[provider](api_key=api_key, premium_api_key=premium_api_key)
     
     def download(
@@ -79,22 +89,7 @@ class MarketDataClient:
         tickers: Union[str, List[str]],
         start: Optional[str] = None,
         end: Optional[str] = None,
-        actions: bool = False,
-        threads: bool = True,
-        ignore_tz: Optional[bool] = None,
-        group_by: str = 'column',
-        auto_adjust: Optional[bool] = None,
-        back_adjust: bool = False,
-        repair: bool = False,
-        keepna: bool = False,
-        progress: bool = True,
-        period: str = "max",
         interval: str = "1d",
-        prepost: bool = False,
-        proxy: Optional[str] = None,
-        rounding: bool = False,
-        timeout: int = 10,
-        session: Optional[Any] = None,
         save: bool = True,
         load: bool = True,
         **kwargs
@@ -106,25 +101,10 @@ class MarketDataClient:
             tickers: Single ticker symbol or list of ticker symbols
             start: Download start date string (YYYY-MM-DD) or _datetime
             end: Download end date string (YYYY-MM-DD) or _datetime
-            actions: Download stock dividends and stock splits events
-            threads: Use threads for mass downloading
-            ignore_tz: Ignore timezone when aligning data from different exchanges
-            group_by: Group by ticker or column
-            auto_adjust: Adjust all OHLC automatically
-            back_adjust: Back-adjusted data to mimic true historical prices
-            repair: Repair missing data
-            keepna: Keep NaN values
-            progress: Show download progress
-            period: Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-            interval: Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
-            prepost: Include pre and post market data
-            proxy: Proxy URL scheme
-            rounding: Round values to 2 decimal places
-            timeout: Timeout for requests
-            session: Custom requests session
-            save: Whether to save results to cache
-            load: Whether to load results from cache
-            **kwargs: Additional provider-specific parameters
+            interval: Data interval (e.g., "1d" for daily, "1h" for hourly)
+            save: Whether to save downloaded data to cache
+            load: Whether to load data from cache if available
+            **kwargs: Provider-specific parameters
             
         Returns:
             pandas.DataFrame containing the market data
@@ -132,83 +112,87 @@ class MarketDataClient:
         Raises:
             ValueError: If tickers is empty or invalid
         """
-        if not tickers:
-            raise ValueError("At least one ticker must be provided")
-            
+        # Convert single ticker to list
         if isinstance(tickers, str):
             tickers = [tickers]
             
-        # Determine data type (adjusted or unadjusted)
-        data_type = "adjusted" if auto_adjust or back_adjust else "unadjusted"
+        if not tickers:
+            raise ValueError("No tickers provided")
+            
+        # Check cache for each symbol
+        cached_symbols = []
+        uncached_symbols = []
+        cached_dfs = []
         
-        # Download data for each ticker
-        dfs = []
-        ticker_iter = tickers if not progress else tqdm(tickers, desc="Downloading symbols")
-        
-        for ticker in ticker_iter:
-            # Try to load from cache first
-            cached_data = None
-            if load:
+        if load:
+            for ticker in tickers:
                 cached_data = self.cache.load_data(
                     provider=self.provider.__class__.__name__.lower().replace("provider", ""),
-                    data_type=data_type,
                     symbol=ticker,
-                    start_date=start or "",
-                    end_date=end or "",
+                    start_date=start or "max",
+                    end_date=end or "today",
                     interval=interval
                 )
-            
-            if cached_data is not None:
-                print(f"Using cached data for {ticker} (use load=False to disable cache)")
-                dfs.append(cached_data)
-            else:
-                # Download fresh data
-                df = self.provider.download(
-                    tickers=ticker,
-                    start=start,
-                    end=end,
-                    actions=actions,
-                    threads=threads,
-                    ignore_tz=ignore_tz,
-                    group_by=group_by,
-                    auto_adjust=auto_adjust,
-                    back_adjust=back_adjust,
-                    repair=repair,
-                    keepna=keepna,
-                    progress=False,  # We handle progress at client level
-                    period=period,
-                    interval=interval,
-                    prepost=prepost,
-                    proxy=proxy,
-                    rounding=rounding,
-                    timeout=timeout,
-                    session=session,
-                    **kwargs
-                )
+                if cached_data is not None:
+                    cached_symbols.append(ticker)
+                    cached_dfs.append(cached_data)
+                else:
+                    uncached_symbols.append(ticker)
+        else:
+            # If load=False, all symbols need to be downloaded
+            uncached_symbols = tickers
 
-                # Save to cache if requested
-                if save and df is not None:
-                    print(f"Saving data to cache for {ticker} (use save=False to disable cache)")
-                    self.cache.save_data(
-                        provider=self.provider.__class__.__name__.lower().replace("provider", ""),
-                        data_type=data_type,
-                        symbol=ticker,
-                        data=df,
-                        start_date=start or "",
-                        end_date=end or "",
-                        interval=interval
-                    )
+        print(uncached_symbols)
+
+        # If we have uncached symbols, download them in a batch
+        if uncached_symbols:
+            if kwargs.get('progress', True):
+                print(f"Downloading {len(uncached_symbols)} symbols: {', '.join(uncached_symbols)}")
                 
-                dfs.append(df)
+            fresh_df = self.provider.download(
+                tickers=uncached_symbols,
+                start=start,
+                end=end,
+                interval=interval,
+                **kwargs
+            )
             
-        if not dfs:
+            if fresh_df is None:
+                raise Exception("No data was successfully downloaded")
+                
+            # Save each symbol to cache separately
+            if save:
+                for ticker in uncached_symbols:
+                    if ticker in fresh_df.columns.levels[0]:
+                        ticker_df = fresh_df[ticker]
+                        self.cache.save_data(
+                            provider=self.provider.__class__.__name__.lower().replace("provider", ""),
+                            symbol=ticker,
+                            data=ticker_df,
+                            start_date=start or "max",
+                            end_date=end or "today",
+                            interval=interval
+                        )
+            
+            cached_dfs.append(fresh_df)
+        
+        # Combine all dataframes
+        if not cached_dfs:
             raise Exception("No data was successfully downloaded")
             
-        # Combine all dataframes
-        if len(dfs) == 1:
-            return dfs[0]
+        if len(cached_dfs) == 1:
+            df = cached_dfs[0]
         else:
-            return pd.concat(dfs, axis=1)
+            df = pd.concat(cached_dfs, axis=1)
+            
+        # Show summary
+        if kwargs.get('progress', True):
+            if cached_symbols:
+                print(f"Loaded {len(cached_symbols)} symbols from cache: {', '.join(cached_symbols)}")
+            if uncached_symbols:
+                print(f"Downloaded {len(uncached_symbols)} symbols: {', '.join(uncached_symbols)}")
+                
+        return df
     
     def clear_cache(self, provider: Optional[str] = None):
         """

@@ -9,36 +9,47 @@ import pandas as pd
 
 class BaseProvider(ABC):
     """
-    Abstract base class for market data providers.
+    Base class for market data providers
     
-    All market data providers must implement this interface.
+    This class defines the interface that all market data providers must implement.
     """
     
     def __init__(self, api_key: Optional[str] = None, premium_api_key: Optional[str] = None):
         """
-        Initialize the provider.
+        Initialize the provider
         
         Args:
-            api_key: Optional regular API key for the provider
+            api_key: Optional API key for the provider
             premium_api_key: Optional premium API key for the provider
         """
         self.api_key = api_key
         self.premium_api_key = premium_api_key
     
-    def _handle_empty_dataframe(self, df: pd.DataFrame, tickers: Union[str, List[str]]) -> Optional[pd.DataFrame]:
+    def _handle_empty_dataframe(self, df: pd.DataFrame, tickers: List[str]) -> pd.DataFrame:
         """
-        Handle empty DataFrames consistently across all providers.
+        Handle empty dataframes and ensure all requested tickers are present
         
         Args:
-            df: The DataFrame to check
-            tickers: The ticker(s) that were requested
+            df: The dataframe to handle
+            tickers: List of requested tickers
             
         Returns:
-            The DataFrame if not empty, None otherwise
+            DataFrame with all requested tickers, using NaN for missing data
         """
-        if df.empty:
-            print(f"No data found for {tickers}")
-            return None
+        if df is None or df.empty:
+            # Create empty DataFrame with correct structure
+            df = pd.DataFrame(index=pd.DatetimeIndex([]))
+            df.columns = pd.MultiIndex.from_product([tickers, ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            return df
+            
+        # Check if all requested tickers are present
+        missing_tickers = set(tickers) - set(df.columns.levels[0])
+        if missing_tickers:
+            # Create empty columns for missing tickers
+            empty_df = pd.DataFrame(index=df.index)
+            empty_df.columns = pd.MultiIndex.from_product([missing_tickers, ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            df = pd.concat([df, empty_df], axis=1)
+            
         return df
     
     @abstractmethod
@@ -47,22 +58,7 @@ class BaseProvider(ABC):
         tickers: Union[str, List[str]],
         start: Optional[str] = None,
         end: Optional[str] = None,
-        actions: bool = False,
-        threads: bool = True,
-        ignore_tz: Optional[bool] = None,
-        group_by: str = 'column',
-        auto_adjust: Optional[bool] = None,
-        back_adjust: bool = False,
-        repair: bool = False,
-        keepna: bool = False,
-        progress: bool = True,
-        period: str = "max",
         interval: str = "1d",
-        prepost: bool = False,
-        proxy: Optional[str] = None,
-        rounding: bool = False,
-        timeout: int = 10,
-        session: Optional[Any] = None,
         **kwargs
     ) -> Optional[pd.DataFrame]:
         """
@@ -72,25 +68,10 @@ class BaseProvider(ABC):
             tickers: Single ticker symbol or list of ticker symbols
             start: Download start date string (YYYY-MM-DD) or _datetime
             end: Download end date string (YYYY-MM-DD) or _datetime
-            actions: Download stock dividends and stock splits events
-            threads: Use threads for mass downloading
-            ignore_tz: Ignore timezone when aligning data from different exchanges
-            group_by: Group by ticker or column
-            auto_adjust: Adjust all OHLC automatically
-            back_adjust: Back-adjusted data to mimic true historical prices
-            repair: Repair missing data
-            keepna: Keep NaN values
-            progress: Show download progress
-            period: Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-            interval: Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
-            prepost: Include pre and post market data
-            proxy: Proxy URL scheme
-            rounding: Round values to 2 decimal places
-            timeout: Timeout for requests
-            session: Custom requests session
-            **kwargs: Additional provider-specific parameters
+            interval: Data interval (e.g., "1d" for daily, "1h" for hourly)
+            **kwargs: Provider-specific parameters
             
         Returns:
             pandas.DataFrame containing the market data or None if download fails
         """
-        pass
+        raise NotImplementedError("Provider must implement download method")

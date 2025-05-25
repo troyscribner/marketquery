@@ -67,10 +67,10 @@ class StooqProvider(BaseProvider):
         # Rename columns to standard format
         column_map = {
             'Date': 'date',
-            'Open': 'open_adj',    # Stooq provides adjusted prices
-            'High': 'high_adj',    # Stooq provides adjusted prices
-            'Low': 'low_adj',      # Stooq provides adjusted prices
-            'Close': 'close_adj',  # Stooq provides adjusted prices
+            'Open': 'adj_open',    # Stooq provides adjusted prices
+            'High': 'adj_high',    # Stooq provides adjusted prices
+            'Low': 'adj_low',      # Stooq provides adjusted prices
+            'Close': 'adj_close',  # Stooq provides adjusted prices
             'Volume': 'volume'     # Volume is not adjusted
         }
         
@@ -101,7 +101,7 @@ class StooqProvider(BaseProvider):
             response = self.session.get(url, timeout=30)
             
             if response.status_code != 200:
-                raise Exception(f"Failed to fetch data for {ticker}: {response.status_code}")
+                return None
                 
             # Parse CSV data
             df = pd.read_csv(io.StringIO(response.text))
@@ -200,12 +200,11 @@ class StooqProvider(BaseProvider):
                     df = future.result()
                     if df is not None:
                         dfs.append(df)
-            
-        if not dfs:
-            return None
-            
+
         # Combine all dataframes
-        if len(dfs) == 1:
+        if not dfs:
+            return self._handle_empty_dataframe(None, tickers)
+        elif len(dfs) == 1:
             return self._handle_empty_dataframe(dfs[0], tickers)
         else:
             combined_df = pd.concat(dfs, axis=1)

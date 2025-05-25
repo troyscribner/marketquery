@@ -10,7 +10,16 @@ from .client import MarketDataClient
 from typing import List, Optional, Union, Any
 import pandas as pd
 
-__all__ = ["MarketDataClient", "download", "help"]
+__all__ = ["MarketDataClient", "download", "help", "clear_cache"]
+
+def clear_cache():
+    """
+    Clear all cached data.
+    
+    This function creates a temporary client to clear the cache directory.
+    """
+    client = MarketDataClient()
+    client.cache.clear_cache()
 
 def help():
     """
@@ -21,6 +30,7 @@ def help():
     - Basic usage examples
     - Common parameters
     - Cache management
+    - Environment variables
     """
     print("\nMarketQuery Help")
     print("===============\n")
@@ -37,6 +47,9 @@ def help():
     print("")
     print("# Use a different provider (e.g., Tiingo)")
     print("data = mq.download('AAPL', provider='tiingo', api_key='your_api_key')")
+    print("")
+    print("# Clear the cache")
+    print("mq.clear_cache()")
     
     print("\nAvailable Providers:")
     print("-------------------")
@@ -66,64 +79,49 @@ def help():
     print("\nCommon Parameters:")
     print("----------------")
     print("tickers: Single ticker or list of tickers (e.g., 'AAPL' or ['AAPL', 'GOOGL'])")
-    print("start: Start date in YYYY-MM-DD format (e.g., '2024-01-01')")
-    print("end: End date in YYYY-MM-DD format (e.g., '2024-01-31')")
-    print("interval: Data interval ('1d', '1wk', '1mo')")
-    print("auto_adjust: Adjust prices for splits/dividends (True/False)")
-    print("threads: Use parallel downloads for multiple tickers (True/False)")
-    print("provider: Data provider to use ('yahoo', 'tiingo', etc.)")
-    print("api_key: API key for providers that require one")
+    print("start: Start date (YYYY-MM-DD)")
+    print("end: End date (YYYY-MM-DD)")
+    print("provider: Data provider to use (default: 'yahoo' or set by MARKETQUERY_DEFAULT_PROVIDER)")
+    print("api_key: API key for providers that require it")
+    print("load: Load data from cache (default: True)")
+    print("save: Save data to cache (default: True)")
+    
+    print("\nEnvironment Variables:")
+    print("-------------------")
+    print("To use environment variables, create a .env file in your project directory:")
+    print("")
+    print("# Set default provider")
+    print("MARKETQUERY_DEFAULT_PROVIDER=tiingo")
+    print("")
+    print("# API keys for different providers")
+    print("TIINGO_API_KEY=your_tiingo_api_key")
+    print("ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key")
+    print("ALPHA_VANTAGE_PREMIUM_API_KEY=your_alpha_vantage_premium_api_key")
+    print("")
+    print("Then load the environment variables in your code:")
+    print("from dotenv import load_dotenv")
+    print("load_dotenv()  # Load environment variables from .env file")
+    print("")
+    print("Available environment variables:")
+    print("- MARKETQUERY_DEFAULT_PROVIDER: Set default provider (e.g., 'yahoo', 'tiingo', 'alpha_vantage')")
+    print("- TIINGO_API_KEY: API key for Tiingo")
+    print("- ALPHA_VANTAGE_API_KEY: API key for Alpha Vantage")
+    print("- ALPHA_VANTAGE_PREMIUM_API_KEY: Premium API key for Alpha Vantage")
     
     print("\nCache Management:")
     print("---------------")
-    print("MarketQuery automatically caches downloaded data to improve performance and reduce API calls.")
+    print("The cache is stored in your system's cache directory:")
+    print("- macOS: ~/Library/Caches/marketquery")
+    print("- Linux: ~/.cache/marketquery")
+    print("- Windows: %LOCALAPPDATA%\\marketquery\\Cache")
     print("")
-    print("Cache Location:")
-    print("  - macOS: ~/Library/Caches/marketquery/")
-    print("  - Linux: ~/.cache/marketquery/")
-    print("  - Windows: %LOCALAPPDATA%\\marketquery\\")
+    print("To clear the cache:")
+    print("mq.clear_cache()")
     print("")
-    print("Cache Behavior:")
-    print("  - Data is cached by provider, ticker, date range, and interval")
-    print("  - Cache is checked before making API requests")
-    print("  - Cache is automatically updated when new data is downloaded")
-    print("")
-    print("Cache Control Parameters:")
-    print("  save: Whether to save downloaded data to cache (default: True)")
-    print("  load: Whether to load data from cache (default: True)")
-    print("")
-    print("\nExamples:")
-    print("--------")
-    print("# Basic usage with default provider (Yahoo)")
-    print("data = mq.download('AAPL')")
-    print("")
-    print("# Use Stooq provider (free, no API key required)")
-    print("data = mq.download('AAPL', provider='stooq')")
-    print("")
-    print("# Use Tiingo provider (requires API key)")
-    print("data = mq.download('AAPL', provider='tiingo', api_key='your_api_key')")
-    print("")
-    print("# Specify date range")
-    print("data = mq.download('AAPL', start='2024-01-01', end='2024-01-31')")
-    print("")
-    print("# Use weekly data")
-    print("data = mq.download('AAPL', interval='1wk')")
-    print("")
-    print("# Get adjusted prices")
-    print("data = mq.download('AAPL', auto_adjust=True)")
-    print("")
-    print("# Download multiple tickers")
-    print("data = mq.download(['AAPL', 'GOOGL', 'MSFT'])")
-    print("")
-    print("# Disable caching")
-    print("data = mq.download('AAPL', save=False)  # Don't save to cache")
-    print("data = mq.download('AAPL', load=False)  # Don't use cached data")
-    print("data = mq.download('AAPL', save=False, load=False)  # Disable caching completely")
-    print("")
-    print("# Clear cache")
-    print("client = mq.MarketDataClient()")
-    print("client.clear_cache()  # Clear all caches")
-    print("client.clear_cache('tiingo')  # Clear specific provider's cache")
+    print("To disable caching:")
+    print("data = mq.download('AAPL', load=False, save=False)")
+    
+    return None  # Explicitly return None to prevent it from being printed
 
 def download(
     tickers: Union[str, List[str]],
@@ -133,7 +131,7 @@ def download(
     threads: bool = True,
     ignore_tz: Optional[bool] = None,
     group_by: str = 'column',
-    auto_adjust: Optional[bool] = None,
+    auto_adjust: bool = False,
     back_adjust: bool = False,
     repair: bool = False,
     keepna: bool = False,
@@ -145,7 +143,7 @@ def download(
     rounding: bool = False,
     timeout: int = 10,
     session: Optional[Any] = None,
-    provider: str = "yahoo",
+    provider: Optional[str] = None,
     api_key: Optional[str] = None,
     premium_api_key: Optional[str] = None,
     **kwargs

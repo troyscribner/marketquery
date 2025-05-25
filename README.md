@@ -37,6 +37,36 @@ data = mq.download(['AAPL', 'GOOGL', 'MSFT'], start='2024-01-01', end='2024-01-3
 data = mq.download('AAPL', provider='tiingo', api_key='your_api_key')
 ```
 
+## Environment Variables
+
+MarketQuery supports configuration through environment variables. To use them:
+
+1. Create a `.env` file in your project directory:
+```bash
+# Set default provider
+MARKETQUERY_DEFAULT_PROVIDER=tiingo
+
+# API keys for different providers
+TIINGO_API_KEY=your_tiingo_api_key
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key
+ALPHA_VANTAGE_PREMIUM_API_KEY=your_alpha_vantage_premium_api_key
+```
+
+2. Load the environment variables in your code:
+```python
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
+import marketquery as mq
+data = mq.download('AAPL')  # Will use settings from .env file
+```
+
+Available environment variables:
+- `MARKETQUERY_DEFAULT_PROVIDER`: Set default provider (e.g., 'yahoo', 'tiingo', 'alpha_vantage')
+- `TIINGO_API_KEY`: API key for Tiingo
+- `ALPHA_VANTAGE_API_KEY`: API key for Alpha Vantage
+- `ALPHA_VANTAGE_PREMIUM_API_KEY`: Premium API key for Alpha Vantage
+
 ## Documentation
 
 For detailed documentation, run:
