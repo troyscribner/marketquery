@@ -38,16 +38,16 @@ class BaseProvider(ABC):
         """
         if df is None or df.empty:
             # Create empty DataFrame with correct structure
-            df = pd.DataFrame(index=pd.DatetimeIndex([]))
-            df.columns = pd.MultiIndex.from_product([tickers, ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            columns = pd.MultiIndex.from_product([tickers, ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            df = pd.DataFrame(index=pd.DatetimeIndex([]), columns=columns)
             return df
             
         # Check if all requested tickers are present
         missing_tickers = set(tickers) - set(df.columns.levels[0])
         if missing_tickers:
             # Create empty columns for missing tickers
-            empty_df = pd.DataFrame(index=df.index)
-            empty_df.columns = pd.MultiIndex.from_product([missing_tickers, ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            missing_columns = pd.MultiIndex.from_product([list(missing_tickers), ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume']])
+            empty_df = pd.DataFrame(index=df.index, columns=missing_columns)
             df = pd.concat([df, empty_df], axis=1)
             
         return df
