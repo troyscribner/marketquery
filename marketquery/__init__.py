@@ -83,7 +83,7 @@ def help():
     print("end: End date (YYYY-MM-DD)")
     print("provider: Data provider to use (default: 'yahoo' or set by MARKETQUERY_DEFAULT_PROVIDER)")
     print("api_key: API key for providers that require it")
-    print("load: Load data from cache (default: True)")
+    print("load: Load data from cache (default: False)")
     print("save: Save data to cache (default: True)")
     
     print("\nEnvironment Variables:")
@@ -118,8 +118,11 @@ def help():
     print("To clear the cache:")
     print("mq.clear_cache()")
     print("")
-    print("To disable caching:")
+    print("To disable caching completely:")
     print("data = mq.download('AAPL', load=False, save=False)")
+    print("")
+    print("To load from cache (if available):")
+    print("data = mq.download('AAPL', load=True)")
     
     return None  # Explicitly return None to prevent it from being printed
 

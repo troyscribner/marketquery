@@ -5,7 +5,7 @@ Cache manager for market data
 import os
 import json
 import pickle
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, Dict, Any, Union
 import pandas as pd
@@ -92,6 +92,10 @@ class CacheManager:
             interval: Data interval
             data: DataFrame to cache
         """
+        # If end_date is None or 'today', use current date for metadata
+        if end_date is None or end_date == 'today':
+            end_date = date.today().isoformat()
+        
         # Create cache path
         data_path = self._get_cache_path(
             provider=provider,
@@ -150,6 +154,10 @@ class CacheManager:
         Returns:
             Cached DataFrame if available and valid, None otherwise
         """
+        # If end_date is None or 'today', use current date for comparison
+        if end_date is None or end_date == 'today':
+            end_date = date.today().isoformat()
+            
         data_path = self._get_cache_path(
             provider=provider,
             symbol=symbol,
